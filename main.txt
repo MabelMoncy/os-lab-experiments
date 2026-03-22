@@ -1,0 +1,1001 @@
+1) IPC using Message Queue – Palindrome checking
+
+sender.c Algorithm
+START
+1. Include required headers (stdio, string, sys/ipc, sys/msg)
+2. Define MSGKEY = 1234
+3. Declare message struct m1 (to send), m2 (to receive), qid
+4. Create/access message queue:
+       qid = msgget(MSGKEY, IPC_CREAT | 0666)
+5. Read input string into m1.text
+6. Set m1.type = 1
+7. Send m1 to queue:
+       msgsnd(qid, &m1, sizeof(m1.text), 0)
+8. Wait and receive message of type 2 into m2:
+       msgrcv(qid, &m2, sizeof(m2.text), 2, 0)
+9. Compare m1.text and m2.text using strcmp:
+       IF equal → print "Palindrome"
+       ELSE     → print "Not a Palindrome"
+10. Delete message queue:
+        msgctl(qid, IPC_RMID, NULL)
+STOP
+
+receiver.c Algorithm
+START
+1. Include required headers (stdio, string, sys/ipc, sys/msg)
+2. Define MSGKEY = 1234 (same as sender)
+3. Declare message struct m1 (to receive), m2 (to send), qid
+4. Access the same message queue:
+       qid = msgget(MSGKEY, IPC_CREAT | 0666)
+5. Wait and receive message of type 1 into m1:
+       msgrcv(qid, &m1, sizeof(m1.text), 1, 0)
+6. Reverse m1.text using two-pointer technique:
+       SET l = 0, r = strlen(s) - 1
+       WHILE l < r:
+           SWAP s[l] and s[r]
+           l++, r--
+7. Set m2.type = 2
+8. Copy reversed string into m2.text:
+       strcpy(m2.text, m1.text)
+9. Send m2 back to queue:
+       msgsnd(qid, &m2, sizeof(m2.text), 0)
+STOP
+
+sender.c
+
+#include <stdio.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#define MSGKEY 1234
+
+struct msg {
+	long type;
+	char text[100];
+};
+
+int main () {
+	struct msg m1, m2;
+	int qid;
+
+	qid = msgget(MSGKEY, IPC_CREAT | 0666);
+
+	printf("Enter a string: ");
+	scanf("%s", m1.text);
+
+	m1.type = 1;
+
+	msgsnd(qid, &m1, sizeof(m1.text), 0);
+	msgrcv(qid, &m2, sizeof(m2.text), 2, 0);
+
+	printf("Reversed String Received: %s\n", m2.text);
+
+	if (strcmp(m1.text, m2.text) == 0)
+		printf("Palindrome\n");
+	else
+		printf("Not a palindrome\n");
+
+	msgctl(qid, IPC_RMID, NULL);
+
+	return 0;
+}
+
+
+receiver.c
+
+#include <stdio.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#define MSGKEY 1234
+
+struct msg {
+	long type;
+	char text[100];
+};
+
+void reverse(char *s) {
+	int l = 0, r = strlen(s) - 1;
+	while (l<r) {
+		char temp = s[l];
+		s[l] = s[r];
+		s[r] = temp;
+		l++; r--;
+	}
+}
+
+int main () {
+	struct msg m1, m2;
+	int qid;
+
+	qid = msgget(MSGKEY, IPC_CREAT | 0666);
+
+	msgrcv(qid, &m1, sizeof(m1.text), 1, 0);
+
+	reverse(m1.text);
+
+	m2.type = 2;
+	strcpy(m2.text, m1.text);
+	msgsnd(qid, &m2, sizeof(m2.text), 0);
+
+	return 0;
+}
+
+2) IPC using Shared Memory – String concatenation & case flipping
+
+ALGORITHM
+Process 1 (process1.c)
+START
+1. Include headers (stdio, string, ctype, unistd, sys/ipc, sys/shm)
+2. Define SHMKEY = 9999
+3. Define struct data {s1[50], s2[50], s3[50], result[200]}
+4. Create shared memory:
+       shmid = shmget(SHMKEY, sizeof(struct data), IPC_CREAT | 0666)
+5. Attach shared memory to process address space:
+       d = shmat(shmid, NULL, 0)
+6. Read 3 strings from user → store in d->s1, d->s2, d->s3
+7. Wait for Process 2 to concatenate:
+       sleep(20)
+8. Flip case of d->result using flipCase():
+       FOR each character in string:
+           IF uppercase → convert to lowercase
+           IF lowercase → convert to uppercase
+9. Print flipped result
+10. Detach shared memory: shmdt(d)
+11. Delete shared memory: shmctl(shmid, IPC_RMID, NULL)
+STOP
+Process 2 (process2.c)
+START
+1. Include headers (stdio, string, sys/ipc, sys/shm)
+2. Define SHMKEY = 9999 (same as Process 1)
+3. Define same struct data
+4. Access same shared memory:
+       shmid = shmget(SHMKEY, sizeof(struct data), IPC_CREAT | 0666)
+5. Attach shared memory:
+       d = shmat(shmid, NULL, 0)
+6. Concatenate s1, s2, s3 with spaces → write into d->result:
+       sprintf(d->result, "%s %s %s", d->s1, d->s2, d->s3)
+7. Print confirmation message
+8. Detach shared memory: shmdt(d)
+STOP
+
+process1.c
+
+c#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+#define SHMKEY 9999
+
+struct data {
+    char s1[50];
+    char s2[50];
+    char s3[50];
+    char result[200];
+};
+
+void flipCase(char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (isupper(str[i]))
+            str[i] = tolower(str[i]);
+        else if (islower(str[i]))
+            str[i] = toupper(str[i]);
+    }
+}
+
+int main() {
+    int shmid;
+    struct data *d;
+
+    shmid = shmget(SHMKEY, sizeof(struct data), IPC_CREAT | 0666);
+    d = (struct data *) shmat(shmid, NULL, 0);
+
+    printf("Enter first string: ");
+    scanf("%s", d->s1);
+    printf("Enter second string: ");
+    scanf("%s", d->s2);
+    printf("Enter third string: ");
+    scanf("%s", d->s3);
+
+    printf("\nWaiting for Process 2 to concatenate...\n");
+    sleep(20);
+
+    flipCase(d->result);
+    printf("\nFinal Output (Flipped Case): %s\n", d->result);
+
+    shmdt(d);
+    shmctl(shmid, IPC_RMID, NULL);
+    return 0;
+}
+
+process2.c
+
+c#include <stdio.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+#define SHMKEY 9999
+
+struct data {
+    char s1[50];
+    char s2[50];
+    char s3[50];
+    char result[200];
+};
+
+int main() {
+    int shmid;
+    struct data *d;
+
+    shmid = shmget(SHMKEY, sizeof(struct data), IPC_CREAT | 0666);
+    d = (struct data *) shmat(shmid, NULL, 0);
+
+    sprintf(d->result, "%s %s %s", d->s1, d->s2, d->s3);
+    printf("Process 2: Concatenated string written to shared memory.\n");
+
+    shmdt(d);
+    return 0;
+}
+
+Multithreading Statistical Computations
+
+Parent Thread (main)
+
+START
+1. Check if command line arguments are provided
+       IF argc < 2 → print usage and exit
+2. Set count = argc - 1
+3. Allocate memory for numbers array:
+       numbers = malloc(count * sizeof(int))
+4. Read integers from command line arguments:
+       FOR i = 1 to argc-1:
+           numbers[i-1] = atoi(argv[i])
+5. Create Thread 1 → calc_mean
+6. Create Thread 2 → calc_median
+7. Wait for Thread 1 to finish → pthread_join(t1)
+8. Create Thread 3 → calc_stddev (needs mean, so wait for t1 first)
+9. Wait for Thread 2 to finish → pthread_join(t2)
+10. Wait for Thread 3 to finish → pthread_join(t3)
+11. Print mean, median, standard deviation
+12. Free allocated memory
+STOP
+
+Thread 1 — Mean
+
+START
+1. Initialize sum = 0
+2. FOR i = 0 to count-1:
+       sum += numbers[i]
+3. mean = sum / count
+4. pthread_exit(NULL)
+STOP
+
+Thread 2 — Median
+
+START
+1. Sort numbers array using qsort()
+2. IF count is even:
+       median = (numbers[count/2 - 1] + numbers[count/2]) / 2.0
+   ELSE:
+       median = numbers[count/2]
+3. pthread_exit(NULL)
+STOP
+
+Thread 3 — Standard Deviation
+
+START
+1. Initialize variance_sum = 0
+2. FOR i = 0 to count-1:
+       variance_sum += (numbers[i] - mean)²
+3. stddev = sqrt(variance_sum / count)
+4. pthread_exit(NULL)
+STOP
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <math.h>
+
+/* Global variables — shared across all threads */
+double mean   = 0.0;
+double median = 0.0;
+double stddev = 0.0;
+int *numbers;
+int count;
+
+/* ─────────────── Thread 1 : Mean ─────────────── */
+void *calc_mean(void *arg) {
+    double sum = 0.0;
+    for (int i = 0; i < count; i++)
+        sum += numbers[i];
+    mean = sum / count;
+    pthread_exit(NULL);
+}
+
+/* ─────────────── Thread 2 : Median ─────────────── */
+int compare(const void *a, const void *b) {
+    return (*(int *)a - *(int *)b);
+}
+
+void *calc_median(void *arg) {
+    qsort(numbers, count, sizeof(int), compare);
+    if (count % 2 == 0)
+        median = (numbers[count/2 - 1] + numbers[count/2]) / 2.0;
+    else
+        median = numbers[count/2];
+    pthread_exit(NULL);
+}
+
+/* ─────────────── Thread 3 : Std Deviation ─────────────── */
+void *calc_stddev(void *arg) {
+    double variance_sum = 0.0;
+    for (int i = 0; i < count; i++)
+        variance_sum += pow(numbers[i] - mean, 2);
+    stddev = sqrt(variance_sum / count);
+    pthread_exit(NULL);
+}
+
+/* ─────────────── Main ─────────────── */
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        printf("Usage: %s <list of integers>\n", argv[0]);
+        exit(1);
+    }
+
+    count = argc - 1;
+    numbers = malloc(count * sizeof(int));
+
+    for (int i = 1; i < argc; i++)
+        numbers[i-1] = atoi(argv[i]);
+
+    pthread_t t1, t2, t3;
+
+    pthread_create(&t1, NULL, calc_mean,   NULL);
+    pthread_create(&t2, NULL, calc_median, NULL);
+
+    pthread_join(t1, NULL);   /* wait for mean — stddev needs it */
+
+    pthread_create(&t3, NULL, calc_stddev, NULL);
+
+    pthread_join(t2, NULL);
+    pthread_join(t3, NULL);
+
+    printf("\nResults:\n");
+    printf("Mean               = %.2f\n", mean);
+    printf("Median             = %.2f\n", median);
+    printf("Standard Deviation = %.2f\n", stddev);
+
+    free(numbers);
+    return 0;
+}
+
+# Compile
+gcc multithread_stats.c -o stats -lpthread -lm
+
+# Run
+./stats 10 20 30 40 50
+
+CPU Scheduling Algorithms
+
+1️⃣ FCFS — First Come First Served
+📋 Algorithm
+START
+1. Input number of processes n
+2. For each process, input:
+       Arrival Time (AT), Burst Time (BT)
+3. Sort processes by Arrival Time (Bubble Sort)
+4. Set currentTime = 0
+5. For each process in sorted order:
+       IF currentTime < AT:
+           currentTime = AT  (CPU was idle, jump to arrival)
+       currentTime += BT
+       CT = currentTime
+       TAT = CT - AT
+       WT = TAT - BT
+       totalWT += WT
+6. Average WT = totalWT / n
+7. Print table
+STOP
+💻 Code
+#include <stdio.h>
+
+struct Process {
+    int pid, arrival, burst;
+    int completion, turnaround, waiting;
+};
+
+int main() {
+    int n;
+    printf("Enter number of processes: ");
+    scanf("%d", &n);
+
+    struct Process p[n];
+
+    for (int i = 0; i < n; i++) {
+        p[i].pid = i + 1;
+        printf("Enter Arrival Time of P%d: ", i + 1);
+        scanf("%d", &p[i].arrival);
+        printf("Enter Burst Time of P%d: ", i + 1);
+        scanf("%d", &p[i].burst);
+    }
+
+    /* Sort by Arrival Time */
+    for (int i = 0; i < n - 1; i++)
+        for (int j = 0; j < n - i - 1; j++)
+            if (p[j].arrival > p[j+1].arrival) {
+                struct Process temp = p[j];
+                p[j] = p[j+1];
+                p[j+1] = temp;
+            }
+
+    int currentTime = 0;
+    float totalWT = 0;
+
+    for (int i = 0; i < n; i++) {
+        if (currentTime < p[i].arrival)
+            currentTime = p[i].arrival;
+
+        currentTime += p[i].burst;
+        p[i].completion  = currentTime;
+        p[i].turnaround  = p[i].completion - p[i].arrival;
+        p[i].waiting     = p[i].turnaround - p[i].burst;
+        totalWT += p[i].waiting;
+    }
+
+    printf("\nFCFS Result:\n");
+    printf("PID\tAT\tBT\tCT\tTAT\tWT\n");
+    for (int i = 0; i < n; i++)
+        printf("P%d\t%d\t%d\t%d\t%d\t%d\n",
+               p[i].pid, p[i].arrival, p[i].burst,
+               p[i].completion, p[i].turnaround, p[i].waiting);
+
+    printf("\nAverage Waiting Time = %.2f\n", totalWT / n);
+    return 0;
+}
+
+## 2️⃣ SRTF — Shortest Remaining Time First
+
+### 📋 Algorithm
+START
+1. Input n processes with AT and BT
+2. Initialize rt = bt for each process (remaining time)
+3. Set time = 0, completed = 0
+4. WHILE completed != n:
+       Find process with minimum rt among arrived processes
+       IF no process found:
+           time++
+           continue
+       Execute that process for 1 time unit:
+           rt--
+           time++
+       IF rt == 0:
+           CT = time
+           TAT = CT - AT
+           WT = TAT - BT
+           completed++
+           totalWT += WT
+5. Average WT = totalWT / n
+6. Print table
+STOP
+
+#include <stdio.h>
+#include <limits.h>
+
+struct Process {
+    int pid, at, bt, rt;
+    int ct, tat, wt;
+};
+
+int main() {
+    int n, completed = 0, time = 0;
+    float totalWT = 0;
+
+    printf("Enter number of processes: ");
+    scanf("%d", &n);
+
+    struct Process p[n];
+
+    for (int i = 0; i < n; i++) {
+        p[i].pid = i + 1;
+        printf("Enter AT of P%d: ", i + 1);
+        scanf("%d", &p[i].at);
+        printf("Enter BT of P%d: ", i + 1);
+        scanf("%d", &p[i].bt);
+        p[i].rt = p[i].bt;
+    }
+
+    while (completed != n) {
+        int shortest = -1;
+        int minRT = INT_MAX;
+
+        for (int i = 0; i < n; i++)
+            if (p[i].at <= time && p[i].rt > 0 && p[i].rt < minRT) {
+                minRT = p[i].rt;
+                shortest = i;
+            }
+
+        if (shortest == -1) { time++; continue; }
+
+        p[shortest].rt--;
+
+        if (p[shortest].rt == 0) {
+            completed++;
+            p[shortest].ct  = time + 1;
+            p[shortest].tat = p[shortest].ct - p[shortest].at;
+            p[shortest].wt  = p[shortest].tat - p[shortest].bt;
+            totalWT += p[shortest].wt;
+        }
+        time++;
+    }
+
+    printf("\nSRTF Result:\n");
+    printf("PID\tAT\tBT\tCT\tTAT\tWT\n");
+    for (int i = 0; i < n; i++)
+        printf("P%d\t%d\t%d\t%d\t%d\t%d\n",
+               p[i].pid, p[i].at, p[i].bt,
+               p[i].ct, p[i].tat, p[i].wt);
+
+    printf("\nAverage Waiting Time = %.2f\n", totalWT / n);
+    return 0;
+}
+
+## 3️⃣ Non-Preemptive Priority Scheduling
+Algorithm
+
+START
+1. Input n processes with AT, BT, Priority
+2. Set completed = 0, time = 0
+3. WHILE completed != n:
+       Among all arrived & not-completed processes:
+           Select process with HIGHEST priority number
+       IF no process found:
+           time++
+           continue
+       Execute selected process fully (non-preemptive):
+           time += BT
+           CT = time
+           TAT = CT - AT
+           WT = TAT - BT
+           mark as completed
+           completed++
+           totalWT += WT
+4. Average WT = totalWT / n
+5. Print table
+STOP
+
+#include <stdio.h>
+
+struct Process {
+    int pid, at, bt, priority;
+    int ct, tat, wt, completed;
+};
+
+int main() {
+    int n;
+    printf("Enter number of processes: ");
+    scanf("%d", &n);
+
+    struct Process p[n];
+
+    for (int i = 0; i < n; i++) {
+        p[i].pid = i + 1;
+        printf("Enter AT, BT, Priority of P%d: ", i + 1);
+        scanf("%d %d %d", &p[i].at, &p[i].bt, &p[i].priority);
+        p[i].completed = 0;
+    }
+
+    int completed = 0, time = 0;
+    float totalWT = 0;
+
+    while (completed != n) {
+        int idx = -1, bestPriority = -1;
+
+        for (int i = 0; i < n; i++)
+            if (!p[i].completed && p[i].at <= time &&
+                p[i].priority > bestPriority) {
+                bestPriority = p[i].priority;
+                idx = i;
+            }
+
+        if (idx == -1) { time++; continue; }
+
+        time        += p[idx].bt;
+        p[idx].ct    = time;
+        p[idx].tat   = p[idx].ct - p[idx].at;
+        p[idx].wt    = p[idx].tat - p[idx].bt;
+        p[idx].completed = 1;
+        completed++;
+        totalWT += p[idx].wt;
+    }
+
+    printf("\nPriority Result:\n");
+    printf("PID\tAT\tBT\tPR\tCT\tTAT\tWT\n");
+    for (int i = 0; i < n; i++)
+        printf("P%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+               p[i].pid, p[i].at, p[i].bt, p[i].priority,
+               p[i].ct, p[i].tat, p[i].wt);
+
+    printf("\nAverage Waiting Time = %.2f\n", totalWT / n);
+    return 0;
+}
+
+## 4️⃣ Round Robin Scheduling
+
+### 📋 Algorithm
+
+START
+1. Input n processes with AT and BT
+2. Input Time Quantum (TQ)
+3. Initialize rt = bt for each process
+4. Add all processes with AT == 0 to ready queue
+5. WHILE completed != n:
+       IF queue is empty:
+           time++
+           continue
+       Dequeue process at front → idx
+       execTime = min(rt, TQ)
+       time += execTime
+       rt -= execTime
+       Add any newly arrived processes to queue
+       IF rt > 0:
+           Re-enqueue the process
+       ELSE:
+           CT = time
+           completed++
+6. For each process:
+       TAT = CT - AT
+       WT = TAT - BT
+       totalWT += WT
+7. Average WT = totalWT / n
+8. Print table
+STOP
+
+#include <stdio.h>
+
+struct Process {
+    int pid, at, bt, rt;
+    int ct, tat, wt;
+};
+
+int main() {
+    int n, tq, time = 0, completed = 0;
+
+    printf("Enter number of processes: ");
+    scanf("%d", &n);
+
+    struct Process p[n];
+
+    for (int i = 0; i < n; i++) {
+        p[i].pid = i + 1;
+        printf("Enter AT and BT of P%d: ", i + 1);
+        scanf("%d %d", &p[i].at, &p[i].bt);
+        p[i].rt = p[i].bt;
+    }
+
+    printf("Enter Time Quantum: ");
+    scanf("%d", &tq);
+
+    int queue[100], front = 0, rear = 0;
+    int inQueue[n];
+    for (int i = 0; i < n; i++) inQueue[i] = 0;
+
+    /* Add AT=0 processes to queue */
+    for (int i = 0; i < n; i++)
+        if (p[i].at == 0) {
+            queue[rear++] = i;
+            inQueue[i] = 1;
+        }
+
+    while (completed != n) {
+        if (front == rear) { time++; continue; }
+
+        int idx  = queue[front++];
+        int exec = (p[idx].rt < tq ? p[idx].rt : tq);
+
+        time      += exec;
+        p[idx].rt -= exec;
+
+        /* Add newly arrived processes */
+        for (int i = 0; i < n; i++)
+            if (p[i].at <= time && !inQueue[i]) {
+                queue[rear++] = i;
+                inQueue[i] = 1;
+            }
+
+        if (p[idx].rt > 0)
+            queue[rear++] = idx;   /* re-queue */
+        else {
+            p[idx].ct = time;
+            completed++;
+        }
+    }
+
+    float totalWT = 0;
+    printf("\nRR Result:\n");
+    printf("PID\tAT\tBT\tCT\tTAT\tWT\n");
+
+    for (int i = 0; i < n; i++) {
+        p[i].tat  = p[i].ct - p[i].at;
+        p[i].wt   = p[i].tat - p[i].bt;
+        totalWT  += p[i].wt;
+        printf("P%d\t%d\t%d\t%d\t%d\t%d\n",
+               p[i].pid, p[i].at, p[i].bt,
+               p[i].ct, p[i].tat, p[i].wt);
+    }
+
+    printf("\nAverage Waiting Time = %.2f\n", totalWT / n);
+    return 0;
+}
+
+Reader-Writer Problem with Writer Priority
+
+Reader Algorithm (Writer Priority)
+START
+1. sem_wait(&queue)        → Block if a writer is waiting
+2. sem_wait(&mutex)        → Lock read_count access
+3. read_count++            → One more reader
+4. IF read_count == 1:
+       sem_wait(&rw_mutex) → First reader blocks all writers
+5. sem_post(&mutex)        → Unlock read_count access
+6. sem_post(&queue)        → Allow others to proceed
+
+   ── CRITICAL SECTION ──
+   READ shared data
+   ── END CRITICAL SECTION ──
+
+7. sem_wait(&mutex)        → Lock read_count access
+8. read_count--            → One less reader
+9. IF read_count == 0:
+       sem_post(&rw_mutex) → Last reader releases writers
+10. sem_post(&mutex)       → Unlock read_count access
+STOP
+Writer Algorithm (Writer Priority)
+START
+1. sem_wait(&queue)        → Writer grabs queue (blocks new readers)
+2. sem_wait(&rw_mutex)     → Wait for exclusive access
+
+   ── CRITICAL SECTION ──
+   WRITE shared data
+   ── END CRITICAL SECTION ──
+
+3. sem_post(&rw_mutex)     → Release exclusive access
+4. sem_post(&queue)        → Allow next reader/writer
+STOP
+Main Algorithm
+START
+1. Initialize semaphores:
+       mutex   = 1  (binary)
+       rw_mutex = 1 (binary)
+       queue   = 1  (binary)
+2. Initialize read_count = 0
+3. Create 5 reader threads and 5 writer threads
+4. Pass unique id (1-5) to each thread
+5. Join all reader threads
+6. Join all writer threads
+7. Destroy all semaphores
+STOP
+
+#include <stdio.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <unistd.h>
+
+sem_t mutex;      /* protects read_count */
+sem_t rw_mutex;   /* exclusive access to shared resource */
+sem_t queue;      /* enforces writer priority */
+
+int read_count = 0;
+
+/* ─────────────── Reader Thread ─────────────── */
+void *reader(void *arg) {
+    int id = *(int *)arg;
+
+    sem_wait(&queue);           /* block if writer is waiting */
+    sem_wait(&mutex);           /* lock read_count */
+    read_count++;
+    if (read_count == 1)
+        sem_wait(&rw_mutex);    /* first reader blocks writers */
+    sem_post(&mutex);           /* unlock read_count */
+    sem_post(&queue);           /* allow others to queue */
+
+    /* ── Critical Section (Reading) ── */
+    printf("Reader %d is READING\n", id);
+    sleep(1);
+    printf("Reader %d has FINISHED READING\n", id);
+    /* ── End Critical Section ── */
+
+    sem_wait(&mutex);           /* lock read_count */
+    read_count--;
+    if (read_count == 0)
+        sem_post(&rw_mutex);    /* last reader releases writers */
+    sem_post(&mutex);           /* unlock read_count */
+
+    return NULL;
+}
+
+/* ─────────────── Writer Thread ─────────────── */
+void *writer(void *arg) {
+    int id = *(int *)arg;
+
+    sem_wait(&queue);           /* writer grabs queue — blocks new readers */
+    sem_wait(&rw_mutex);        /* exclusive access */
+
+    /* ── Critical Section (Writing) ── */
+    printf("\tWriter %d is WRITING\n", id);
+    sleep(2);
+    printf("\tWriter %d has FINISHED WRITING\n", id);
+    /* ── End Critical Section ── */
+
+    sem_post(&rw_mutex);        /* release exclusive access */
+    sem_post(&queue);           /* allow next reader or writer */
+
+    return NULL;
+}
+
+/* ─────────────── Main ─────────────── */
+int main() {
+    pthread_t readers[5], writers[5];
+    int id[5];
+
+    /* Initialize semaphores */
+    sem_init(&mutex,    0, 1);
+    sem_init(&rw_mutex, 0, 1);
+    sem_init(&queue,    0, 1);
+
+    /* Create threads */
+    for (int i = 0; i < 5; i++) {
+        id[i] = i + 1;
+        pthread_create(&readers[i], NULL, reader, &id[i]);
+        pthread_create(&writers[i], NULL, writer, &id[i]);
+    }
+
+    /* Join all threads */
+    for (int i = 0; i < 5; i++) {
+        pthread_join(readers[i], NULL);
+        pthread_join(writers[i], NULL);
+    }
+
+    /* Cleanup */
+    sem_destroy(&mutex);
+    sem_destroy(&rw_mutex);
+    sem_destroy(&queue);
+
+    return 0;
+}
+
+🔧 Compile & Run
+bashgcc rw_writer_priority.c -o rw -lpthread
+./rw
+
+📋 Banker's Algorithm Initialization
+START
+1. Set n = 5 (processes), m = 3 (resource types)
+2. Define Allocation matrix [n][m]
+3. Define Max matrix [n][m]
+4. Define Available array [m]
+5. Compute Need matrix:
+       FOR each process i:
+           FOR each resource j:
+               need[i][j] = max[i][j] - alloc[i][j]
+6. Initialize Work = Available
+7. Initialize Finish[i] = false for all processes
+STOPSafety Algorithm
+START
+1. Set count = 0
+2. WHILE count < n:
+       found = false
+       FOR each process i:
+           IF Finish[i] == false:
+               Check if Need[i] <= Work (for all resources)
+               IF yes:
+                   Work = Work + Allocation[i]
+                   Finish[i] = true
+                   safeSeq[count] = i
+                   count++
+                   found = true
+       IF found == false:
+           Print "System is in UNSAFE state"
+           EXIT
+3. IF all processes finish:
+       Print "System is in SAFE state"
+       Print safe sequence
+STOP
+
+
+#include <stdio.h>
+
+int main() {
+    int n = 5, m = 3;
+
+    /* Allocation Matrix — what each process currently holds */
+    int alloc[5][3] = {
+        {0, 1, 0},
+        {2, 0, 0},
+        {3, 0, 2},
+        {2, 1, 1},
+        {0, 0, 2}
+    };
+
+    /* Max Matrix — maximum demand of each process */
+    int max[5][3] = {
+        {7, 5, 3},
+        {3, 2, 2},
+        {9, 0, 2},
+        {2, 2, 2},
+        {4, 3, 3}
+    };
+
+    /* Available Resources */
+    int avail[3] = {3, 3, 2};
+
+    int need[5][3];
+    int finish[5]  = {0};
+    int safeSeq[5];
+    int work[3];
+
+    /* Step 1: Initialize Work = Available */
+    for (int i = 0; i < m; i++)
+        work[i] = avail[i];
+
+    /* Step 2: Calculate Need = Max - Allocation */
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < m; j++)
+            need[i][j] = max[i][j] - alloc[i][j];
+
+    /* Step 3: Print Need Matrix */
+    printf("Need Matrix:\n");
+    for (int i = 0; i < n; i++) {
+        printf("P%d: ", i);
+        for (int j = 0; j < m; j++)
+            printf("%d ", need[i][j]);
+        printf("\n");
+    }
+
+    /* Step 4: Safety Algorithm */
+    int count = 0;
+
+    while (count < n) {
+        int found = 0;
+
+        for (int i = 0; i < n; i++) {
+            if (!finish[i]) {
+                int j;
+                /* Check if Need[i] <= Work */
+                for (j = 0; j < m; j++)
+                    if (need[i][j] > work[j])
+                        break;
+
+                if (j == m) {
+                    /* Process i can proceed */
+                    for (int k = 0; k < m; k++)
+                        work[k] += alloc[i][k]; /* release resources */
+
+                    safeSeq[count++] = i;
+                    finish[i]        = 1;
+                    found            = 1;
+                }
+            }
+        }
+
+        /* No process could proceed — unsafe state */
+        if (!found) {
+            printf("\nSystem is in UNSAFE state\n");
+            return 0;
+        }
+    }
+
+    /* All processes finished — safe state */
+    printf("\nSystem is in SAFE state\n");
+    printf("Safe Sequence: ");
+    for (int i = 0; i < n; i++)
+        printf("P%d ", safeSeq[i]);
+    printf("\n");
+
+    return 0;
+}
