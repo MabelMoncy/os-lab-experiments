@@ -36,10 +36,12 @@ sudo apt install build-essential
 ```
 # compile
 gcc program_name.c -o program_name
+```
 
 5. Run the compiled program:
 
-```./program_name
+```
+./program_name
 ```
 
 Notes & tips
